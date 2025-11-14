@@ -1,0 +1,268 @@
+from pathlib import Path
+from typing import Callable, Literal
+from warnings import warn
+
+import pandas as pd
+from tqdm import tqdm
+
+from .client import SEMOAPIClient
+from .util import date_to_str
+
+
+CACHE_PATH = Path("/Users/eoincondron/ipynb/Energy Data/cache")
+
+
+def cache_path_for_date(date: str, prefix: str) -> Path:
+    date = date_to_str(date)
+    cache_file = f"{prefix}_{date}.pq"
+    cache_path = CACHE_PATH / cache_file
+    return cache_path
+
+
+def cache_daily_data(file_name_from_args: Callable):
+
+    def wrapped(func):
+
+        def inner(
+            date, *args, cache_only: bool = False, try_cache: bool = True, **kwargs
+        ) -> pd.DataFrame:
+            date = date_to_str(date)
+            filename = file_name_from_args(date, *args, **kwargs)
+            cache_path = CACHE_PATH / filename
+            if try_cache and cache_path.exists():
+                return pd.read_parquet(cache_path)
+            elif cache_only and not cache_path.exists():
+                raise FileNotFoundError(f"Cache file not found: {cache_path}")
+
+            df = func(date, *args, **kwargs)
+            df.to_parquet(cache_path)
+
+            return df
+
+        return inner
+
+    return wrapped
+
+
+def _load_date_range(
+    func,
+    start_date: str,
+    end_date: str,
+    cache_only: bool = False,
+    try_cache: bool = True,
+    on_missing: Literal["warn", "raise", "ignore"] = "warn",
+    verbose: bool = False,
+    **kwargs,
+) -> pd.DataFrame:
+    dfs = []
+    dates = pd.date_range(start_date, end_date)
+    if verbose:
+        dates = tqdm(dates, desc=f"Loading {func.__name__} data")
+
+    for date in pd.date_range(start_date, end_date):
+        try:
+            dfs.append(func(date, cache_only=cache_only, try_cache=try_cache, **kwargs))
+        except (FileNotFoundError, ValueError):
+            if on_missing == "raise":
+                raise
+            elif on_missing == "warn":
+                warn(f"{func.__name__} Data missing for date {date}, skipping")
+    if not dfs:
+        raise ValueError("No data found in the specified date range")
+
+    return pd.concat(dfs)
+
+
+@cache_daily_data(file_name_from_args=lambda date: f"day_ahead_prices_{date}.pq")
+def get_day_ahead_prices_single_date(
+    date, cache_only: bool = False, try_cache: bool = True
+) -> pd.DataFrame:
+    prices = SEMOAPIClient().get_day_ahead_prices(date)
+    # Column names can have mixed frequency suffixes, e.g. Index_prices_30_EUR and Index_prices_60_EUR
+    # We standardize to just Index_prices_EUR to facilitate concatenation
+    prices.columns = prices.columns.str.replace("_30|_60", "", regex=True)
+
+    return prices
+
+
+def get_day_ahead_prices_date_range(
+    start_date: str,
+    end_date: str,
+    cache_only: bool = False,
+    try_cache: bool = True,
+    on_missing: Literal["warn", "raise", "ignore"] = "warn",
+):
+    return _load_date_range(get_day_ahead_prices_single_date, **locals())
+
+
+@cache_daily_data(
+    file_name_from_args=lambda date, session_number: f"intraday_prices_{session_number}_{date}.pq"
+)
+def get_intraday_prices_single_date(
+    date,
+    session_number: int,
+    cache_only: bool = False,
+    try_cache: bool = True,
+) -> pd.DataFrame:
+    return SEMOAPIClient().get_intraday_prices(date, session_number=session_number)
+
+
+def get_intraday_prices_date_range(
+    start_date: str,
+    end_date: str,
+    session_number: int,
+    cache_only: bool = False,
+    on_missing: Literal["warn", "raise", "ignore"] = "warn",
+):
+    return _load_date_range(get_intraday_prices_single_date, **locals())
+
+
+def _get_forecast_single_date(
+    date,
+    resource_name: str,
+    cache_only: bool = False,
+    try_cache: bool = True,
+    as_of: str = "12:00",
+) -> pd.DataFrame:
+    client = SEMOAPIClient()
+    reports = client.get_reports_date_range(date, resource_name=resource_name)
+    if reports.empty:
+        raise FileNotFoundError(f"No wind forecast report found for date {date}")
+
+    reports.sort_values("PublishTime", inplace=True)
+
+    if as_of:
+        resources = reports.ResourceName[reports.PublishTime < f"{date}T{as_of}"].iloc[
+            -1:
+        ]
+    else:
+        resources = reports.ResourceName.unique()
+
+    df = pd.concat(
+        [client.download_XML(resource, as_tree=False) for resource in resources]
+    )
+
+    return df
+
+
+@cache_daily_data(file_name_from_args=lambda date, as_of: f"load_forecast_{date}.pq")
+def get_load_forecast_single_date(
+    date, cache_only: bool = False, try_cache: bool = True, as_of: str = "12:00"
+) -> pd.DataFrame:
+    return _get_forecast_single_date(resource_name="PUB_DailyLoadFcst", **locals())
+
+
+def get_load_forecast_date_range(
+    start_date: str,
+    end_date: str,
+    as_of: str = "12:00",
+    try_cache: bool = True,
+    cache_only: bool = False,
+    on_missing: Literal["warn", "raise", "ignore"] = "warn",
+):
+    return _load_date_range(get_load_forecast_single_date, **locals())
+
+
+@cache_daily_data(
+    file_name_from_args=lambda date, *args, **kwargs: f"wind_forecast_{date}.pq"
+)
+def get_wind_forecast_single_date(
+    date, as_of: str = "12:00", cache_only: bool = False, try_cache: bool = True
+) -> pd.DataFrame:
+    return _get_forecast_single_date(
+        resource_name="PUB_4DayAggRollWindUnitFcst", **locals()
+    )
+
+
+def get_wind_forecast_date_range(
+    start_date: str,
+    end_date: str,
+    as_of: str = "12:00",
+    try_cache: bool = True,
+    cache_only: bool = False,
+    on_missing: Literal["warn", "raise", "ignore"] = "warn",
+):
+    return _load_date_range(get_wind_forecast_single_date, **locals())
+
+
+def get_all_market_price_data_date_range(
+    start_date: str,
+    end_date: str,
+    cache_only: bool = False,
+    on_missing: Literal["warn", "raise", "ignore"] = "warn",
+) -> pd.DataFrame:
+    kwargs = locals().copy()
+    prices = get_day_ahead_prices_date_range(**kwargs)
+    prices = prices.filter(like="_EUR").squeeze().to_frame("day_ahead_price")
+    for n in range(1, 4):
+        prices[f"intraday_price_{n}"] = get_intraday_prices_date_range(
+            **kwargs,
+            session_number=n,
+        ).Index_prices_30_EUR
+
+    return prices
+
+
+# @cache_daily_data("combined_forecasts_{}.pq".format)
+def get_combined_forecasts_single_date(
+    publish_date,
+    days_ahead: int = 0,
+    as_of: str = "12:00",
+    try_cache: bool = True,
+    cache_only: bool = False,
+) -> pd.DataFrame:
+    """
+    Get combined wind and load forecasts for a given date.
+    The forecasts cover a 24-hour period from 21:30 on the given date.
+    The returned DataFrame has a 30-minute frequency and contains columns for wind and load forecasts.
+    """
+    publish_date = date_to_str(publish_date)
+
+    kwargs = dict(
+        date=publish_date, as_of=as_of, try_cache=try_cache, cache_only=cache_only
+    )
+    load = get_load_forecast_single_date(**kwargs)
+    wind = get_wind_forecast_single_date(**kwargs)
+
+    period_start = (
+        pd.Timestamp(publish_date, tz="utc")
+        + pd.Timedelta(days_ahead, "d")
+        + pd.Timedelta("22h")
+    )
+    # 24-hour period from 21:30 on the given date, left inclusive
+    indexer = slice(period_start, period_start + pd.Timedelta(0.999, "D"))
+
+    wind = (
+        wind.set_index("EndTime")
+        .filter(regex="Forecast|PublishTime")
+        .resample("30min")
+        .mean()
+    ).loc[indexer]
+    load = load.set_index("EndTime").filter(regex="Forecast|PublishTime").loc[indexer]
+
+    wind.columns = wind.columns.str.replace("Load", "").str.replace("Forecast", "Wind")
+    load.columns = load.columns.str.replace("Forecast", "")
+    load = load.rename(columns={"Aggregated": "LoadTotal"})
+
+    forecasts = wind.join(load, lsuffix="Wind", rsuffix="Load", how="inner")
+
+    if len(forecasts) < 48 or forecasts.isna().any().any():
+        raise ValueError(
+            f"data incomplete for {publish_date} with {days_ahead} day prediction"
+        )
+
+    return forecasts
+
+
+def get_combined_forecasts_date_range(
+    start_date: str,
+    end_date: str,
+    days_ahead: int = 0,
+    as_of: str = "12:00",
+    cache_only: bool = False,
+    on_missing: Literal["warn", "raise", "ignore"] = "warn",
+) -> pd.DataFrame:
+    return _load_date_range(
+        get_combined_forecasts_single_date,
+        **locals(),
+    )
