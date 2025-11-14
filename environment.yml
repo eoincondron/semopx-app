@@ -1,0 +1,41 @@
+name: semopx-app
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Python
+  - python=3.11
+
+  # Core data science packages
+  - pandas>=2.0.0
+  - numpy>=1.24.0
+  - pyarrow>=12.0.0
+
+  # Machine learning
+  - lightgbm>=4.0.0
+
+  # HTTP requests
+  - requests>=2.31.0
+
+  # Progress bars
+  - tqdm>=4.65.0
+
+  # Jupyter (for development/analysis)
+  - jupyter
+  - ipykernel
+  - matplotlib
+  - seaborn
+
+  # Development tools
+  - pytest>=7.4.0
+  - pytest-cov>=4.1.0
+  - black>=23.0.0
+  - isort>=5.12.0
+  - flake8>=6.0.0
+  - mypy>=1.4.0
+
+  # Pip packages not available in conda
+  - pip
+  - pip:
+    - groupby-lib>=0.1.0
+    - plyer>=2.1.0  # For desktop notifications
