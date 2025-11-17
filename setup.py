@@ -39,6 +39,10 @@ setup(
         "alerts": [
             "plyer>=2.1.0",  # Cross-platform desktop notifications
         ],
+        "streamlit": [
+            "streamlit>=1.28.0",
+            "plotly>=5.17.0",  # For interactive charts
+        ],
         "dev": [
             "pytest>=7.4.0",
             "pytest-cov>=4.1.0",
