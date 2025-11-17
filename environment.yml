@@ -26,6 +26,10 @@ dependencies:
   - matplotlib
   - seaborn
 
+  # Streamlit dashboard
+  - streamlit>=1.28.0
+  - plotly>=5.17.0
+
   # Development tools
   - pytest>=7.4.0
   - pytest-cov>=4.1.0
