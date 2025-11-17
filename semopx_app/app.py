@@ -107,38 +107,19 @@ class SEMODashboard:
         """
         styler = df_data.style
 
-        # Apply background gradient to Wind Generation
-        styler = styler.background_gradient(
-            subset=["Wind Generation (MW)"],
-            cmap="Greens",
-            vmin=df_data["Wind Generation (MW)"].min(),
-            vmax=df_data["Wind Generation (MW)"].max(),
-        )
+        for col_name, color_map, num_format in [
+            ("Wind Generation (MW)", "Greens", "{:,.0f}"),
+            ("Total Load (MW)", "Blues", "{:,.0f}"),
+            ("Wind %", "RdYlGn", "{:.1%}"),
+        ]:
 
-        # Apply background gradient to Total Load
-        styler = styler.background_gradient(
-            subset=["Total Load (MW)"],
-            cmap="Blues",
-            vmin=df_data["Total Load (MW)"].min(),
-            vmax=df_data["Total Load (MW)"].max(),
-        )
-
-        # Apply background gradient to Wind %
-        styler = styler.background_gradient(
-            subset=["Wind %"],
-            cmap="RdYlGn",
-            vmin=df_data["Wind %"].min(),
-            vmax=df_data["Wind %"].max(),
-        )
-
-        # Format the numeric columns
-        styler = styler.format(
-            {
-                "Wind Generation (MW)": "{:,.0f}",
-                "Total Load (MW)": "{:,.0f}",
-                "Wind %": "{:.1%}",
-            }
-        )
+            # Apply background gradient to Wind Generation
+            styler = styler.background_gradient(
+                subset=[col_name],
+                cmap=color_map,
+                vmin=df_data[col_name].min(),
+                vmax=df_data[col_name].max(),
+            ).format({col_name: num_format})
 
         return styler
 
