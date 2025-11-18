@@ -1,9 +1,12 @@
 from pathlib import Path
 from typing import Callable, Literal
 from warnings import warn
+import io
+import os
 
 import pandas as pd
 from tqdm import tqdm
+import requests
 
 from .client import SEMOAPIClient
 from .util import date_to_str
@@ -11,6 +14,20 @@ from .util import date_to_str
 
 CACHE_PATH = Path(__file__).parent / ".data_cache"
 CACHE_PATH.mkdir(exist_ok=True)
+
+# GitHub cache configuration
+# When running on Streamlit Cloud, falls back to GitHub for cached files
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "eoincondron/semopx-app")
+GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+GITHUB_CACHE_BASE = (
+    f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/.data_cache"
+)
+
+# Enable GitHub fallback on Streamlit Cloud
+USE_GITHUB_CACHE = (
+    os.environ.get("STREAMLIT_SHARING_MODE", None) is not None
+    or os.environ.get("USE_GITHUB_CACHE", "false").lower() == "true"
+)
 
 
 def cache_path_for_date(date: str, prefix: str) -> Path:
@@ -28,6 +45,39 @@ def cache_path_for_date(date: str, prefix: str) -> Path:
     cache_file = f"{prefix}_{date}.pq"
     cache_path = CACHE_PATH / cache_file
     return cache_path
+
+
+def download_from_github(filename: str) -> pd.DataFrame | None:
+    """
+    Try to download a parquet file from GitHub cache.
+
+    Args:
+        filename: Name of the parquet file to download
+
+    Returns:
+        DataFrame if successful, None if file not found or error occurs
+    """
+    if not USE_GITHUB_CACHE:
+        return
+
+    url = f"{GITHUB_CACHE_BASE}/{filename}"
+
+    try:
+        response = requests.get(url, timeout=30)
+        if response.status_code == 200:
+            return pd.read_parquet(io.BytesIO(response.content))
+        elif response.status_code == 404:
+            # File doesn't exist in GitHub cache yet
+            return None
+        else:
+            warn(f"GitHub cache returned status {response.status_code} for {filename}")
+            return None
+    except requests.exceptions.Timeout:
+        warn(f"Timeout downloading {filename} from GitHub cache")
+        return None
+    except Exception as e:
+        warn(f"Error downloading {filename} from GitHub cache: {e}")
+        return None
 
 
 def cache_daily_data(file_name_from_args: Callable):
@@ -60,13 +110,34 @@ def cache_daily_data(file_name_from_args: Callable):
             date = date_to_str(date)
             filename = file_name_from_args(date, *args, **kwargs)
             cache_path = CACHE_PATH / filename
+
+            # Step 1: Try local cache first (fast)
             if try_cache and cache_path.exists():
                 return pd.read_parquet(cache_path)
-            elif cache_only and not cache_path.exists():
+
+            # Step 2: Try GitHub cache (persistent, slower)
+            if try_cache:
+                df = download_from_github(filename)
+                if df is not None:
+                    # Save to local cache for this session
+                    try:
+                        df.to_parquet(cache_path)
+                    except Exception as e:
+                        warn(f"Could not save to local cache: {e}")
+                    return df
+
+            # Step 3: If cache_only mode, raise error
+            if cache_only:
                 raise FileNotFoundError(f"Cache file not found: {cache_path}")
 
+            # Step 4: Fetch from API as last resort
             df = func(date, *args, **kwargs)
-            df.to_parquet(cache_path)
+
+            # Save to local cache
+            try:
+                df.to_parquet(cache_path)
+            except Exception as e:
+                warn(f"Could not save to local cache: {e}")
 
             return df
 
