@@ -312,6 +312,28 @@ class SEMODashboard:
             div[data-testid="stDataFrame"] {
                 font-size: 1rem;
             }
+
+            /* Mobile responsive adjustments */
+            @media (max-width: 768px) {
+                .main-header {
+                    font-size: 1.8rem;
+                }
+                .sub-header {
+                    font-size: 1rem;
+                }
+                div[data-testid="stDataFrame"] {
+                    font-size: 0.85rem;
+                }
+                /* Make dataframes scrollable horizontally on mobile */
+                div[data-testid="stDataFrame"] > div {
+                    overflow-x: auto;
+                }
+                /* Reduce padding on mobile */
+                .block-container {
+                    padding-left: 1rem;
+                    padding-right: 1rem;
+                }
+            }
         </style>
         """,
             unsafe_allow_html=True,
