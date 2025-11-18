@@ -1,0 +1,64 @@
+name: Update Data Cache
+
+on:
+  schedule:
+    # Run daily at 1 AM UTC
+    - cron: '0 1 * * *'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  update-cache:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+
+      - name: Update cache with recent data
+        run: |
+          python -c "
+          from datetime import datetime, timedelta
+          from semopx_app.data_cache import (
+              get_combined_forecasts,
+              get_day_ahead_prices,
+              get_intraday_prices
+          )
+
+          # Fetch data for the last 7 days to ensure we have recent data
+          for days_back in range(7):
+              date = (datetime.now() - timedelta(days=days_back)).strftime('%Y%m%d')
+              print(f'Caching data for {date}...')
+              try:
+                  get_combined_forecasts(date)
+                  get_day_ahead_prices(date)
+                  get_intraday_prices(date)
+                  print(f'  ✓ Successfully cached {date}')
+              except Exception as e:
+                  print(f'  ✗ Error caching {date}: {e}')
+          "
+
+      - name: Check for new cache files
+        id: check_changes
+        run: |
+          git diff --quiet .data_cache/ || echo "changes=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push cache updates
+        if: steps.check_changes.outputs.changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .data_cache/
+          git commit -m "chore: update data cache [skip ci]"
+          git push
