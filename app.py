@@ -17,6 +17,7 @@ from pandas.io.formats.style import Styler
 import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from matplotlib import pyplot as plt
 
 from semopx_app.util import DayDelta, date_to_str
 from semopx_app import data_cache
@@ -271,6 +272,27 @@ class SEMODataLoader:
 
         return fig
 
+    def hourly_averages_plot(self):
+        grouper = self.forecast_data.index.strftime("%H:%M").rename("Time of Day")
+        hourly_averages = self._regional_data.groupby(grouper).mean()
+        wind_contrib = hourly_averages.eval("100 * WindForecast/ LoadForecast")
+        hourly_averages = hourly_averages.rename(
+            columns=SEMODashboard.COLUMN_DISPLAY_NAME_MAP
+        )
+        ax = hourly_averages.plot(
+            figsize=(10, 4),
+            title="Hourly Averages of Wind, Demand",
+            ylabel="Generation (MW)",
+            rot=45,
+        )
+        ax.legend(loc="center left")
+        ax = wind_contrib.to_frame("Wind Contribution").plot(
+            ax=ax.twinx(), ylabel="Wind Contribution %", color="magenta", style="--o"
+        )
+        ax.legend(loc="upper right")
+
+        return ax
+
 
 class SEMODashboard:
     """Main dashboard class for SEMO Energy Market Analysis."""
@@ -279,6 +301,12 @@ class SEMODashboard:
         "All Ireland": "Total",
         "Republic of Ireland": "ROI",
         "Northern Ireland": "NI",
+    }
+
+    COLUMN_DISPLAY_NAME_MAP = {
+        "WindForecast": "Wind Generation (MW)",
+        "LoadForecast": "Total Demand (MW)",
+        "WindPc": "Wind Contribution",
     }
 
     def __init__(self):
@@ -424,12 +452,7 @@ class SEMODashboard:
             Styled DataFrame
         """
         # Rename columns
-        rename_map = {
-            "WindForecast": "Wind Generation (MW)",
-            "LoadForecast": "Total Demand (MW)",
-            "WindPc": "Wind Contribution",
-        }
-        df = df.rename(columns=rename_map).reset_index()
+        df = df.rename(columns=self.COLUMN_DISPLAY_NAME_MAP).reset_index()
         styler = df.style
 
         for col_name, color_map, vmin, vmax in [
@@ -651,6 +674,7 @@ class SEMODashboard:
 
         self._render_monthly_averages()
         self._render_tariff_zone_averages()
+        self._render_hourly_averages_plot()
 
     def _render_monthly_averages(self):
         st.subheader("Monthly Averages")
@@ -693,16 +717,11 @@ class SEMODashboard:
 
         st.dataframe(self._style_forecast_dataframe(tariff_zone_summary))
 
-        # # Download button
-
-        # st.markdown("---")
-        # csv = df_resampled.to_csv()
-        # st.download_button(
-        #     label="📥 Download Historical Data as CSV",
-        #     data=csv,
-        #     file_name=f"historical_data_{.strftime('%Y%m%start_dated')}_{end_date.strftime('%Y%m%d')}.csv",
-        #     mime="text/csv",
-        # )
+    def _render_hourly_averages_plot(self):
+        st.subheader("Hourly Averages")
+        self.data_loader.hourly_averages_plot()
+        plt.tight_layout()
+        st.pyplot(plt.gcf())
 
     def render_price_analysis_tab(self):
         """Render the price analysis tab (placeholder)."""
