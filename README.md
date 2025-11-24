@@ -45,6 +45,8 @@ streamlit run app.py
 
 Then open your browser to `http://localhost:8501`
 
+Access the publicly hosted app [here](https://semopx-app-8ujau4spuym833tscyugu4.streamlit.app)
+
 The dashboard features:
 - 📊 **Wind Forecast Tab**: Wind percentage forecasts by tariff zone and day with heatmap visualization
 - 📈 **Wind/Load Plot Tab**: Interactive Plotly charts showing wind generation, load, and wind contribution percentage
