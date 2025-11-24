@@ -4,7 +4,7 @@ Python client for SEMO (Single Electricity Market Operator) and SEMOpx (Exchange
 
 ## Features
 
-- 📊 **Data Access**: Fetch day-ahead and intraday electricity prices from SEMO/SEMOpx APIs
+- 📊 **Data Access**: Fetch day-ahead and intraday electricity prices from SEMO/SEMOpx APIs, as well as load and wind forecasts
 <!-- - 🌬️ **Forecasting**: Wind and load generation forecasts with ML-based price predictions -->
 - 📈 **Interactive Dashboard**: Streamlit web app for visualizing market data and forecasts
 - ⚡ **EV Charging Alerts (Under development)**: Smart alerts for optimal EV charging times based on electricity prices
@@ -16,7 +16,6 @@ Python client for SEMO (Single Electricity Market Operator) and SEMOpx (Exchange
 ```python
 from semopx_app.client import SEMOAPIClient
 from semopx_app.data_cache import get_day_ahead_prices_single_date
-from semopx_app.analysis import wind_percentage_forecast_table
 
 # Initialize client
 client = SEMOAPIClient()
@@ -24,15 +23,8 @@ client = SEMOAPIClient()
 # Get day-ahead prices
 prices = get_day_ahead_prices_single_date("2024-01-15")
 
-# Get wind percentage forecasts
-wind_forecast = wind_percentage_forecast_table("2024-01-15")
 
-# Generate price prediction
-prediction, scores = generate_price_prediction(
-    prediction_date="2024-01-15",
-    days_ahead=1,
-    n_training_days=90
-)
+
 ```
 
 ### Streamlit Dashboard
@@ -54,40 +46,6 @@ The dashboard features:
 - 🌍 **Region Selection**: View data for All Ireland, Republic of Ireland, or Northern Ireland
 - 💾 **CSV Export**: Download forecast data
 - 🎨 **Modern UI**: Clean, responsive interface with interactive visualizations
-
-### EV Charging Alerts
-
-Run the EV charging alert system:
-
-```bash
-semopx-alert
-```
-
-Or use it programmatically:
-
-```python
-from semopx_app.alert import EVChargingAlertSystem
-
-system = EVChargingAlertSystem(alert_date="2024-01-15")
-system.run()
-```
-
-## Project Structure
-
-```
-semopx-app/
-├── app.py                      # Streamlit dashboard application
-├── semopx_app/
-│   ├── client.py              # API client for SEMO/SEMOpx
-│   ├── data_cache.py          # Caching utilities for data fetching
-│   ├── analysis.py            # Analysis functions (wind forecasts, etc)
-│   ├── model.py               # ML models for price prediction
-│   ├── alert.py               # EV charging alert system
-│   └── util.py                # Utility functions
-├── setup.py                   # Package setup (setuptools)
-├── pyproject.toml            # Modern Python packaging config
-└── environment.yml           # Conda environment specification
-```
 
 ## Data Sources
 
@@ -168,28 +126,6 @@ A GitHub Action (`.github/workflows/update-cache.yml`) runs daily at 1 AM UTC to
 
 You can also trigger it manually from the Actions tab on GitHub
 
-### Alert Configuration
-
-Configure EV charging alerts by editing the default config in `semopx_app/alert.py`:
-
-```python
-config = {
-    "thresholds": {
-        "very_low": 30,   # €/MWh
-        "low": 50,        # €/MWh
-        "moderate": 70    # €/MWh
-    },
-    "charging": {
-        "duration_hours": 4,
-        "preferred_start": "23:00",
-        "preferred_end": "07:00"
-    },
-    "alerts": {
-        "email_enabled": False,
-        "desktop_enabled": True
-    }
-}
-```
 
 ## Development
 
