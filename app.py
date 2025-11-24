@@ -8,7 +8,6 @@ A Streamlit app for visualizing Irish energy market data including:
 """
 
 from typing import Optional
-from datetime import datetime, timedelta
 from warnings import warn
 
 import numpy as np
@@ -391,7 +390,7 @@ class SEMODashboard:
             layout="wide",
             initial_sidebar_state="expanded",
         )
-        self.selected_date: str
+        self.now = pd.Timestamp.now(tz="UTC")
         self.selected_region: str = "All Ireland"
         self._apply_custom_css()
 
@@ -453,20 +452,9 @@ class SEMODashboard:
         )
 
     def render_sidebar(self):
-        """Render the sidebar with date selection and info."""
+        """Render the sidebar with region selection and info."""
         st.sidebar.header("Settings")
         st.sidebar.markdown("---")
-
-        # Date selector
-        st.sidebar.subheader("📅 Date Selection")
-        default_date = datetime.now()
-        self.selected_date = st.sidebar.date_input(
-            "Forecast Date",
-            value=default_date,
-            min_value=datetime(2020, 1, 1),
-            max_value=datetime.now() + timedelta(days=30),
-            help="Select the date for which to generate forecasts",
-        ).strftime("%Y-%m-%d")
 
         # Region selector
         st.sidebar.subheader("🌍 Region Selection")
@@ -476,28 +464,6 @@ class SEMODashboard:
             options=region_options,
             index=0,  # Default to "All Ireland"
             help="Select the region for wind and load forecasts",
-        )
-
-        # Historical data settings
-        st.sidebar.subheader("📈 Historical Data Settings")
-        self.n_days_lookback = st.sidebar.number_input(
-            "Days to Look Back",
-            min_value=1,
-            max_value=365,
-            value=90,
-            step=1,
-            help="Number of days of historical data to display",
-        )
-
-        frequency_options = ["day", "week", "month"]
-        self.sampling_frequency = st.sidebar.selectbox(
-            "Sampling Frequency",
-            options=frequency_options,
-            index=1,  # Default to "day"
-            help="Frequency for sampling historical data",
-        )
-        self._sampling_frequency_pandas = {"day": "d", "week": "W", "month": "m"}.get(
-            self.sampling_frequency
         )
 
         # Info section
@@ -694,42 +660,58 @@ class SEMODashboard:
             st.write(f"**Wind %:** {min_wind_pct:.1f}%")
 
     def _render_download_button(self):
-        """
-        Render CSV download button.
-
-        Args:
-            df: Forecast dataframe
-            date_str: Date string for filename
-        """
+        """Render CSV download button."""
         st.markdown("---")
         csv = self.data_loader.forecast_data.to_csv()
+        selected_date = self.now.strftime("%Y-%m-%d")
         st.download_button(
             label="📥 Download Data as CSV",
             data=csv,
-            file_name=f"wind_forecast_{self.selected_date}.csv",
+            file_name=f"wind_forecast_{selected_date}.csv",
             mime="text/csv",
         )
 
-    def render_historical_data_tab(
-        self,
-    ):
-        """
-        Render the historical data tab with wind and load trends.
-
-        Args:
-            region_name: User-friendly region name
-            n_days_lookback: Number of days to look back
-            frequency: Grouping frequency ('hour', 'day', 'week')
-        """
+    def render_historical_data_tab(self):
+        """Render the historical data tab with wind and load trends."""
         st.header(f"📊 Historical Data Analysis - {self.selected_region}")
 
+        # Historical data settings
+        st.subheader("📈 Settings")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            n_days_lookback = st.number_input(
+                "Days to Look Back",
+                min_value=1,
+                max_value=365,
+                value=90,
+                step=1,
+                help="Number of days of historical data to display",
+            )
+
+        with col2:
+            frequency_options = ["day", "week", "month"]
+            sampling_frequency = st.selectbox(
+                "Sampling Frequency",
+                options=frequency_options,
+                index=1,  # Default to "week"
+                help="Frequency for sampling historical data",
+            )
+
+        sampling_frequency_pandas = {"day": "d", "week": "W", "month": "m"}.get(
+            sampling_frequency
+        )
+
+        st.markdown("---")
+
+        selected_date = self.now.strftime("%Y-%m-%d")
         n_days = (
-            self.data_loader.forecast_data.loc[: self.selected_date]
+            self.data_loader.forecast_data.loc[:selected_date]
             .index.floor("D")
             .nunique()
         )
 
-        if n_days < self.n_days_lookback:
+        if n_days < n_days_lookback:
             st.warning(
                 f"Not all requested dates are available. Earliest date is {self.data_loader.forecast_data.index[0].date()}"
             )
@@ -737,12 +719,12 @@ class SEMODashboard:
         st.markdown(
             f"""
         Showing historical wind and load data for the past **{n_days} days**,
-        grouped by **{self.sampling_frequency}**.
+        grouped by **{sampling_frequency}**.
         """
         )
         fig = self.data_loader.wind_load_forecast_plot(
-            n_days_lookback=self.n_days_lookback,
-            sampling_frequency=self._sampling_frequency_pandas,
+            n_days_lookback=n_days_lookback,
+            sampling_frequency=sampling_frequency_pandas,
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -1137,15 +1119,13 @@ class SEMODashboard:
         self.render_header()
         self.render_sidebar()
 
-        # Get selected date (set default if None)
-        if self.selected_date is None:
-            self.selected_date = datetime.now().strftime("%Y%m%d")
+        selected_date = self.now.strftime("%Y-%m-%d")
 
         try:
-            with st.spinner(f"Loading forecast data for {self.selected_date}..."):
+            with st.spinner(f"Loading forecast data for {selected_date}..."):
                 self.data_loader = SEMODataLoader(
-                    self.selected_date,
-                    n_days_lookback=self.n_days_lookback,
+                    selected_date,
+                    n_days_lookback=90,
                     region=self.selected_region,
                 )
         except Exception as e:
