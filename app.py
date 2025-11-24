@@ -352,15 +352,9 @@ class SEMODataLoader:
         """
         kwargs = locals().copy()
         del kwargs["self"]
-        df = (
-            self._regional_data.groupby(
-                [self.forecast_data.date, self.forecast_data.tariff_zone]
-            )
-            .mean()
-            .eval("WindForecast/ LoadForecast")
-        )  # type: ignore
-
-        overnight_wind_pc = df.xs("Overnight", 0, 1).clip(0, 1)
+        mask = self.forecast_data.tariff_zone == "Overnight"
+        means = self._regional_data[mask].groupby(self.forecast_data.date).mean()
+        overnight_wind_pc = means.eval("WindForecast/ LoadForecast").clip(0, 1)  # type: ignore
 
         results = {}
         for good_wind_level in np.arange(0, 1.05, 0.05):
@@ -532,7 +526,7 @@ class SEMODashboard:
             Styled DataFrame
         """
         # Rename columns
-        df = df.rename(columns=self.COLUMN_DISPLAY_NAME_MAP).reset_index()
+        df = df.rename(columns=self.COLUMN_DISPLAY_NAME_MAP)
         styler = df.style
 
         for col_name, color_map, vmin, vmax in [
