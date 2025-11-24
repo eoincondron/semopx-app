@@ -9,6 +9,7 @@ A Streamlit app for visualizing Irish energy market data including:
 
 from typing import Optional
 from warnings import warn
+from functools import cached_property
 
 import numpy as np
 import pandas as pd
@@ -131,7 +132,9 @@ class SEMODataLoader:
             copy=False,
         )
 
-    def wind_percentage_forecast_table(self) -> pd.DataFrame:
+    def wind_percentage_forecast_table(
+        self, asof: Optional[pd.Timestamp] = None
+    ) -> pd.DataFrame:
         """
         Generate a table of Wind Contribution forecasts categorized by day of the week and tariff zone.
 
@@ -143,7 +146,10 @@ class SEMODataLoader:
             categorized by day of the week and tariff zone (DayTime, Peak, Evening, Overnight).
 
         """
-        df = self.forecast_data.loc[self.date :].copy()
+        if asof is None:
+            asof = pd.Timestamp(self.date, tz="UTC")
+
+        df = self.forecast_data.loc[asof:].copy()
 
         morning = df.time_of_day <= "8h"
         date_offset = df.date - np.where(morning, 1, 0) * pd.Timedelta(1, "d")
@@ -527,14 +533,31 @@ class SEMODashboard:
         fig = self.data_loader.wind_load_forecast_plot()
         st.plotly_chart(fig, use_container_width=True)
 
-    def render_main_tab(self):
-        """
-        Render the wind forecast table with heatmap styling.
+    @cached_property
+    def wind_contribution_table(self):
+        return self.data_loader.wind_percentage_forecast_table(
+            asof=self.now
+        )
 
-        Args:
-            date_str: Date string in YYYY-MM-DD format
-            region_name: User-friendly region name
-        """
+    def wind_contribution_table_styled(self):
+        df = self.wind_contribution_table.reset_index()
+        day_shade_key = (df.Day != df.Day.shift()).cumsum() % 2 == 1
+
+        # Blank duplicate day names for visual grouping
+        df["Day"] = df["Day"].astype(str).mask(df["Day"].duplicated(), "")
+
+        styler = self._style_forecast_dataframe(df)
+        styler = styler.apply(
+            func=lambda s: [
+                f"background-color: {'rgb(200, 200, 200)' if gray else 'white'}"
+                for gray in day_shade_key
+            ],
+            subset=["Day", "Period"],
+        )
+        return styler
+
+    def render_main_tab(self):
+        """Render the wind forecast table with heatmap styling."""
         st.header(f"Wind Contribution Forecast by Tariff Zone - {self.selected_region}")
 
         st.markdown("---")
@@ -556,25 +579,9 @@ class SEMODashboard:
             )
         )
 
-        df = self.data_loader.wind_percentage_forecast_table().reset_index()
-
-        day_shade_key = (df.Day != df.Day.shift()).cumsum() % 2 == 1
-
-        # Blank duplicate day names for visual grouping
-        df["Day"] = df["Day"].astype(str).mask(df["Day"].duplicated(), "")
-
-        styler = self._style_forecast_dataframe(df)
-        styler = styler.apply(
-            func=lambda s: [
-                f"background-color: {'rgb(200, 200, 200)' if gray else 'white'}"
-                for gray in day_shade_key
-            ],
-            subset=["Day", "Period"],
-        )
-
         # Display styled table
         st.dataframe(
-            styler,
+            self.wind_contribution_table_styled(),
             hide_index=True,
             use_container_width=False,
             height="stretch",
@@ -590,15 +597,9 @@ class SEMODashboard:
         self.render_wind_load_forecast_plot()
 
     def render_summary_statistics(self):
-        """
-        Render summary statistics for the forecast data.
-
-        Args:
-            df: Forecast dataframe
-            date_str: Date string for CSV export
-        """
+        """Render summary statistics for the forecast data."""
         st.subheader("📈 Summary Statistics")
-        df = self.data_loader.wind_percentage_forecast_table()
+        df = self.wind_contribution_table
 
         col1, col2, col3 = st.columns(3)
 
@@ -633,17 +634,10 @@ class SEMODashboard:
         self._render_best_worst_periods(max_wind_pct, min_wind_pct)
 
     def _render_best_worst_periods(self, max_wind_pct: float, min_wind_pct: float):
-        """
-        Render best and worst wind periods.
-
-        Args:
-            df: Forecast dataframe
-            max_wind_pct: Maximum Wind Contribution
-            min_wind_pct: Minimum Wind Contribution
-        """
+        """Render best and worst wind periods."""
         st.markdown("---")
         col_best, col_worst = st.columns(2)
-        df = self.data_loader.wind_percentage_forecast_table()
+        df = self.wind_contribution_table
 
         with col_best:
             st.success("**🌬️ Best Wind Period**")
