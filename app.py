@@ -535,9 +535,7 @@ class SEMODashboard:
 
     @cached_property
     def wind_contribution_table(self):
-        return self.data_loader.wind_percentage_forecast_table(
-            asof=self.now
-        )
+        return self.data_loader.wind_percentage_forecast_table(asof=self.now)
 
     def wind_contribution_table_styled(self):
         df = self.wind_contribution_table.reset_index()
@@ -631,27 +629,25 @@ class SEMODashboard:
             )
 
         # Best and worst periods
-        self._render_best_worst_periods(max_wind_pct, min_wind_pct)
+        self._render_best_worst_periods()
 
-    def _render_best_worst_periods(self, max_wind_pct: float, min_wind_pct: float):
+    def _render_best_worst_periods(self):
         """Render best and worst wind periods."""
         st.markdown("---")
         col_best, col_worst = st.columns(2)
-        df = self.wind_contribution_table
+        wind_pc = self.wind_contribution_table.WindPc
 
         with col_best:
             st.success("**🌬️ Best Wind Period**")
-            best_day, best_time = df["WindPc"].idxmax()  # type: ignore
-            st.write(f"**Day:** {best_day}")
-            st.write(f"**Time:** {best_time}")
-            st.write(f"**Wind %:** {max_wind_pct:.1f}%")
+            best_day, best_time = wind_pc.idxmax()  # type: ignore
+            st.write(f"**Day and Time:** {best_day} {best_time}")
+            st.write(f"**Wind %:** {wind_pc.max():.1%}")
 
         with col_worst:
             st.warning("**🔻 Lowest Wind Period**")
-            worst_day, worst_time = df["WindPc"].idxmin()  # type: ignore
-            st.write(f"**Day:** {worst_day}")
-            st.write(f"**Time:** {worst_time}")
-            st.write(f"**Wind %:** {min_wind_pct:.1f}%")
+            worst_day, worst_time = wind_pc.idxmin()  # type: ignore
+            st.write(f"**Day and Time:** {worst_day} {worst_time}")
+            st.write(f"**Wind %:** {wind_pc.min():.1%}")
 
     def _render_download_button(self):
         """Render CSV download button."""
