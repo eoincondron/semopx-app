@@ -31,9 +31,9 @@ jobs:
           python -c "
           from datetime import datetime, timedelta
           from semopx_app.data_cache import (
-              get_combined_forecasts,
-              get_day_ahead_prices,
-              get_intraday_prices
+              get_combined_forecasts_single_date,
+              get_day_ahead_prices_single_date,
+              get_intraday_prices_single_date,
           )
 
           # Fetch data for the last 7 days to ensure we have recent data
@@ -41,9 +41,9 @@ jobs:
               date = (datetime.now() - timedelta(days=days_back)).strftime('%Y%m%d')
               print(f'Caching data for {date}...')
               try:
-                  get_combined_forecasts(date)
-                  get_day_ahead_prices(date)
-                  get_intraday_prices(date)
+                  get_combined_forecasts_sinlge_date(date)
+                  get_day_ahead_prices_single_date(date)
+                  get_intraday_prices_single_date(date)
                   print(f'  ✓ Successfully cached {date}')
               except Exception as e:
                   print(f'  ✗ Error caching {date}: {e}')
