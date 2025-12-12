@@ -41,7 +41,7 @@ jobs:
               date = (datetime.now() - timedelta(days=days_back)).strftime('%Y%m%d')
               print(f'Caching data for {date}...')
               try:
-                  get_combined_forecasts_sinlge_date(date)
+                  get_combined_forecasts_single_date(date)
                   get_day_ahead_prices_single_date(date)
                   get_intraday_prices_single_date(date)
                   print(f'  ✓ Successfully cached {date}')
