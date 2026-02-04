@@ -39,11 +39,11 @@ def cache_path_for_date(date: str, prefix: str) -> Path:
         prefix: Prefix for the cache file name (e.g., 'day_ahead_prices')
 
     Returns:
-        Path object for the cache file (e.g., .data_cache/day_ahead_prices_20240115.pq)
+        Path object for the cache file (e.g., .data_cache/day_ahead_prices/20240115.pq)
     """
     date = date_to_str(date)
-    cache_file = f"{prefix}_{date}.pq"
-    cache_path = CACHE_PATH / cache_file
+    cache_file = f"{date}.pq"
+    cache_path = CACHE_PATH / prefix / cache_file
     return cache_path
 
 
@@ -110,6 +110,7 @@ def cache_daily_data(file_name_from_args: Callable):
             date = date_to_str(date)
             filename = file_name_from_args(date, *args, **kwargs)
             cache_path = CACHE_PATH / filename
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Step 1: Try local cache first (fast)
             if try_cache and cache_path.exists():
@@ -194,7 +195,7 @@ def _load_date_range(
     return pd.concat(dfs)
 
 
-@cache_daily_data(file_name_from_args=lambda date: f"day_ahead_prices_{date}.pq")
+@cache_daily_data(file_name_from_args=lambda date: f"day_ahead_prices/{date}.pq")
 def get_day_ahead_prices_single_date(
     date, cache_only: bool = False, try_cache: bool = True
 ) -> pd.DataFrame:
@@ -251,7 +252,7 @@ def get_day_ahead_prices_date_range(
 
 
 @cache_daily_data(
-    file_name_from_args=lambda date, session_number: f"intraday_prices_{session_number}_{date}.pq"
+    file_name_from_args=lambda date, session_number: f"intraday_prices_{session_number}/{date}.pq"
 )
 def get_intraday_prices_single_date(
     date,
@@ -315,7 +316,7 @@ def _get_forecast_single_date(
     return df
 
 
-@cache_daily_data(file_name_from_args=lambda date, as_of: f"load_forecast_{date}.pq")
+@cache_daily_data(file_name_from_args=lambda date, as_of: f"load_forecasts/{date}.pq")
 def get_load_forecast_single_date(
     date, cache_only: bool = False, try_cache: bool = True, as_of: str = "12:00"
 ) -> pd.DataFrame:
@@ -334,7 +335,7 @@ def get_load_forecast_date_range(
 
 
 @cache_daily_data(
-    file_name_from_args=lambda date, *args, **kwargs: f"wind_forecast_{date}.pq"
+    file_name_from_args=lambda date, *args, **kwargs: f"wind_forecasts/{date}.pq"
 )
 def get_wind_forecast_single_date(
     date, as_of: str = "12:00", cache_only: bool = False, try_cache: bool = True
@@ -399,8 +400,6 @@ def get_combined_forecasts_single_date(
     publish_date,
     days_ahead: int = 0,
     as_of: str = "12:00",
-    try_cache: bool = True,
-    cache_only: bool = False,
 ) -> pd.DataFrame:
     """
     Get combined wind and load forecasts for a given date.
@@ -451,7 +450,6 @@ def get_combined_forecasts_date_range(
     end_date: str,
     days_ahead: int = 0,
     as_of: str = "12:00",
-    cache_only: bool = False,
     on_missing: Literal["warn", "raise", "ignore"] = "warn",
 ) -> pd.DataFrame:
     """
