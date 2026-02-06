@@ -111,7 +111,6 @@ class SEMODataLoader:
         )
         self.date = date_to_str(date)
         self.region = region
-        self.forecast_data: pd.DataFrame
         self.n_days_lookback = n_days_lookback
         self.forecast_data = load_forecast_data(
             start_date=self.start_date, end_date=self.date
@@ -678,6 +677,12 @@ class SEMODashboard:
                 step=1,
                 help="Number of days of historical data to display",
             )
+            if n_days_lookback > self.data_loader.n_days_lookback:
+                self.data_loader = SEMODataLoader(
+                    date=self.data_loader.date,
+                    n_days_lookback=n_days_lookback,
+                    region=self.data_loader.region,
+                )
 
         with col2:
             frequency_options = ["day", "week", "month"]
@@ -694,21 +699,24 @@ class SEMODashboard:
 
         st.markdown("---")
 
-        selected_date = self.now.strftime("%Y-%m-%d")
-        n_days = (
-            self.data_loader.forecast_data.loc[:selected_date]
-            .index.floor("D")
-            .nunique()
-        )
-
-        if n_days < n_days_lookback:
+        selected_date = self.now.floor("D")
+        earliest_date = selected_date - DayDelta(n_days_lookback - 1)
+        if earliest_date < self.data_loader.forecast_data.index[0].floor("D"):
             st.warning(
                 f"Not all requested dates are available. Earliest date is {self.data_loader.forecast_data.index[0].date()}"
             )
 
+        daily_counts = self.data_loader.forecast_data.LoadTotal.resample("D").size()
+        missing_dates = daily_counts.index[daily_counts == 0].tolist()
+        if missing_dates:
+            st.warning(
+                f"Missing data for dates: {', '.join([str(d.date()) for d in missing_dates])}"
+            )
+
         st.markdown(
             f"""
-        Showing historical wind and load data for the past **{n_days} days**,
+        Showing historical wind and load data for the past **{n_days_lookback} days**
+        ({earliest_date.strftime('%Y-%m-%d')} to {selected_date.strftime('%Y-%m-%d')}),
         grouped by **{sampling_frequency}**.
         """
         )
@@ -1109,13 +1117,15 @@ class SEMODashboard:
         self.render_header()
         self.render_sidebar()
 
-        selected_date = self.now.strftime("%Y-%m-%d")
+        selected_date = self.now.floor("D")
 
         try:
-            with st.spinner(f"Loading forecast data for {selected_date}..."):
+            with st.spinner(
+                f"Loading forecast data for {selected_date.strftime('%Y-%m-%d')}..."
+            ):
                 self.data_loader = SEMODataLoader(
                     selected_date,
-                    n_days_lookback=90,
+                    n_days_lookback=150,
                     region=self.selected_region,
                 )
         except Exception as e:
