@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Callable, Literal
 from warnings import warn
+from functools import wraps, partial
 import io
 import os
 
@@ -104,6 +105,7 @@ def cache_daily_data(file_name_from_args: Callable):
 
     def wrapped(func):
 
+        @wraps(func)
         def inner(
             date, *args, cache_only: bool = False, try_cache: bool = True, **kwargs
         ) -> pd.DataFrame:
@@ -316,9 +318,14 @@ def _get_forecast_single_date(
     return df
 
 
-@cache_daily_data(file_name_from_args=lambda date, as_of: f"load_forecasts/{date}.pq")
+@cache_daily_data(
+    file_name_from_args=lambda date, *args, **kwargs: f"load_forecasts/{date}.pq"
+)
 def get_load_forecast_single_date(
-    date, cache_only: bool = False, try_cache: bool = True, as_of: str = "12:00"
+    date,
+    as_of: str = "12:00",
+    cache_only: bool = False,
+    try_cache: bool = True,
 ) -> pd.DataFrame:
     return _get_forecast_single_date(resource_name="PUB_DailyLoadFcst", **locals())
 
@@ -477,3 +484,22 @@ def get_combined_forecasts_date_range(
         get_combined_forecasts_single_date,
         **locals(),
     )
+
+
+def update_cache(date):
+    for func in [
+        get_wind_forecast_single_date,
+        get_load_forecast_single_date,
+        get_day_ahead_prices_single_date,
+        partial(get_intraday_prices_single_date, session_number=1),
+        partial(get_intraday_prices_single_date, session_number=2), 
+        partial(get_intraday_prices_single_date, session_number=3),
+    ]:
+        func_name = getattr(func, "func", func).__name__
+        print(f"Caching {func_name} for date {date}...")
+
+        try:
+            func(date)
+            print(f"  ✓ Successfully cached {date}")
+        except Exception as e:
+            print(f"  ✗ Error caching {date}: {e}")
