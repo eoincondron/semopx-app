@@ -23,7 +23,6 @@ from semopx_app.util import DayDelta, date_to_str
 from semopx_app import data_cache
 from semopx_app.ev_charging_strategy import get_charge_history
 
-
 TARIFF_ZONES = {
     "DayTime": "08:00:00 - 17:00:00",
     "Peak": "17:00:00 - 19:00:00",
@@ -157,6 +156,8 @@ class SEMODataLoader:
         )
         group_keys = ["day_relative_to_tariff_zone", "tariff_zone"]
         df = df[group_keys].join(self._regional_data)
+        # Clip wind forecast to load forecast to avoid unrealistic wind contribution, wind contribution cannot exceed total load
+        df["WindForecast"] = df["WindForecast"].clip(0, df["LoadForecast"])  # type: ignore
         averages = df.groupby(group_keys, observed=True).mean()
         averages: pd.DataFrame = averages.eval("WindPc = WindForecast / LoadForecast")  # type: ignore
         averages.index.names = ["Day", "Period"]
@@ -474,8 +475,7 @@ class SEMODashboard:
         # Info section
         st.sidebar.markdown("---")
         st.sidebar.subheader("ℹ️ About")
-        st.sidebar.info(
-            """
+        st.sidebar.info("""
             This dashboard displays energy market data from SEMO (Single Electricity Market Operator)
             and SEMOpx (Exchange Market) for Ireland and Northern Ireland.
 
@@ -483,8 +483,7 @@ class SEMODashboard:
             - SEMO Balancing Market
             - SEMOpx Exchange Market
             - Wind & Load Forecasts
-            """
-        )
+            """)
 
     def _style_forecast_dataframe(self, df: pd.DataFrame) -> Styler:
         """
@@ -559,12 +558,10 @@ class SEMODashboard:
 
         st.markdown("---")
 
-        st.markdown(
-            """
+        st.markdown("""
             This table shows the forecasted wind generation as a percentage of total load,
             broken down by day of the week and tariff zone for the next 3 days.
-            """
-        )
+            """)
 
         st.markdown(
             "\n**Tariff Zones:**\n"
@@ -713,13 +710,11 @@ class SEMODashboard:
                 f"Missing data for dates: {', '.join([str(d.date()) for d in missing_dates])}"
             )
 
-        st.markdown(
-            f"""
+        st.markdown(f"""
         Showing historical wind and load data for the past **{n_days_lookback} days**
         ({earliest_date.strftime('%Y-%m-%d')} to {selected_date.strftime('%Y-%m-%d')}),
         grouped by **{sampling_frequency}**.
-        """
-        )
+        """)
         fig = self.data_loader.wind_load_forecast_plot(
             n_days_lookback=n_days_lookback,
             sampling_frequency=sampling_frequency_pandas,
@@ -781,8 +776,7 @@ class SEMODashboard:
         """Render the EV charging strategy tab with interactive parameters."""
         st.header(f"🔋 EV Charging Strategy Analysis - {self.selected_region}")
 
-        st.markdown(
-            """
+        st.markdown("""
         This analysis evaluates a smart EV charging strategy that maximizes the use of wind-generated electricity.
         The strategy charges the EV overnight either opportunistically or when it is forced to:
 
@@ -796,8 +790,7 @@ class SEMODashboard:
 
         The chart below shows how different "good wind" thresholds affect the weighted average wind contribution
         during charging sessions. Adjust the parameters to see how charging behavior and wind utilization change.
-        """
-        )
+        """)
 
         st.markdown("---")
         st.subheader("⚙️ Parameters")
@@ -945,8 +938,9 @@ class SEMODashboard:
                     ]
                 )
                 .mean()
-                .eval("WindForecast/ LoadForecast")
+                .eval("WindForecast / LoadForecast")
             )
+
             overnight_wind_pc = df.xs("Overnight", 0, 1).clip(0, 1)
 
             charge_history = get_charge_history(
