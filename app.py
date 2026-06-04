@@ -578,7 +578,7 @@ class SEMODashboard:
             self.wind_contribution_table_styled(),
             hide_index=True,
             use_container_width=False,
-            height="stretch",
+            height="content",
             column_config={
                 "Day": st.column_config.TextColumn(
                     "Day",
