@@ -1,3 +1,4 @@
+from warnings import warn
 import time
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Literal, Optional
@@ -282,7 +283,8 @@ class SEMOAPIClient:
             raise ValueError(f"No reports found for {date} session {session}")
 
         reports = reports.sort_values("PublishTime")
-        assert len(reports) == 1, f"Expected 1 report, got {len(reports)}"
+        if len(reports) > 1:
+            warn(f"Expected 1 report, got {len(reports)}")
         resource_name, publish_time = reports.iloc[0][["ResourceName", "PublishTime"]]
         df = self.download_and_parse_auction_data(resource_name)
         df["PublishTime"] = publish_time
